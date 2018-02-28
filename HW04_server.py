@@ -12,7 +12,6 @@ SERVER_HOST = ''    # All available interfaces
 SERVER_PORT = 5032
 
 GOODBYE = "Goodbye!\r\n"
-INVALID = "Invalid entry received. Expecting: "
 
 class State(object):
     def __init__(self):
@@ -30,13 +29,15 @@ class BeginState(State):
     Waits for 'HELO xxx' from client. All other messages except 'quit' are ignored.
     '''    
     def parseInput(self, input):
+        print(input)
         if re.match("^quit*.", input.lower()):
             self.response = GOODBYE
         if re.match("^HELO*.", input) and len(input.split()) >= 2:
-            self.response = "Hello %s\r\n" % input.split()[1]
+            print("wtf mate")
+            self.response = "250 %s Hello %s\r\n" % (serverIP, input.split()[1])
             self.next = WaitState()
         else:
-            self.response = INVALID + "HELO xxx.xxx\r\n"                   
+            self.response = "503 5.5.2 Send hello first\r\n"            
             
         
 class WaitState(State):
@@ -69,7 +70,7 @@ class ClientConnection(object):
         self.__listen__()
         
     def respond220(self):
-        response = "220 " + gethostname() + " Service ready\r\n"
+        response = "220 " + serverIP + " Service ready\r\n"
         self.connection.send(response.encode(encoding ='utf_8'))
         
     def __listen__(self):
@@ -104,5 +105,6 @@ def listen():
 if __name__ == '__main__':
     sock_obj = socket(AF_INET, SOCK_STREAM)
     sock_obj.bind((SERVER_HOST, SERVER_PORT))
+    serverIP = gethostname()
     sock_obj.listen(5)  # 5 pending connections before new ones rejected
     listen()
