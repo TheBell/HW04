@@ -9,61 +9,85 @@ import re
 from socket import *
 
 SERVER_HOST = ''    # All available interfaces
-SERVER_PORT = 5037
+SERVER_PORT = 5032
+
+GOODBYE = "Goodbye!\r\n"
+INVALID = "Invalid entry received. Expecting: "
 
 class State(object):
-    
     def __init__(self):
-        pass
+        self.next = self
+        self.response = "State not initiated correctly."
     
+    def getResponse(self):
+        return self.response
     
-
-class InitialState(State):
+    def nextState(self):
+        return self.next
     
-    def __init__(self):
-        pass
-    
+class BeginState(State):
+    '''
+    Waits for 'HELO xxx' from client. All other messages except 'quit' are ignored.
+    '''    
     def parseInput(self, input):
-        if re.match("^quit*.", input):
-            return False
-    
+        if re.match("^quit*.", input.lower()):
+            self.response = GOODBYE
+        if re.match("^HELO*.", input) and len(input.split()) >= 2:
+            self.response = "Hello %s\r\n" % input.split()[1]
+            self.next = WaitState()
+        else:
+            self.response = INVALID + "HELO xxx.xxx\r\n"                   
+            
+        
+class WaitState(State):
+    def parseInput(self, input):
+        if re.match("^quit*.", input.lower()):
+            self.response = GOODBYE
+
+class MailFromState(State):
+    def parseInput(self, input):
+        if re.match("^quit*.", input.lower()):
+            self.response = GOODBYE
+
+class RcptToState(State):
+    def parseInput(self, input):
+        if re.match("^quit*.", input.lower()):
+            self.response = GOODBYE
+
+class Writing(State):
+    def parseInput(self, input):
+        if re.match("^quit*.", input.lower()):
+            self.response = GOODBYE
 
 class ClientConnection(object):
     
     def __init__(self, connection):
         self.connection = connection
-        self.state = InitialState()
+        self.response = "Something weird happened."  # This should never be the sent response
+        self.state = BeginState()
+        self.respond220()
         self.__listen__()
         
-
+    def respond220(self):
+        response = "220 " + gethostname() + " Service ready\r\n"
+        self.connection.send(response.encode(encoding ='utf_8'))
         
     def __listen__(self):
         while True:
             data = self.connection.recv(10000)
             if not data: break
-            print("Echo: " + data.decode())
-            self.state = self.readLine(data.decode())
-            if not self.state: break
-            self.connection.send(self.state.getresponse().encode())
+            d = data.decode()
+            print("Received: " + d)
+            self.readData(d)
+            self.connection.send(self.state.getResponse().encode())
         self.connection.close()
         
-    def readLine(self, input):
+    def readData(self, input):
         # read line and clean input (strip, upper, etc.)
-        return self.state.parseInput(input)
+        self.state.parseInput(input)
+        self.response = self.state.getResponse()
+        self.state = self.state.nextState()
 
-        
-
-def handleClient(connection):
-    '''
-    Keeps connection open with client. Receives input and sends response as string of bytes. 
-    '''
-    while True:
-        data = connection.recv(1024)
-        state = InitialState()
-        if not data: break
-        reply = ''
-        connection.send(reply.encode())
-    connection.close()
 
 def listen():
     '''
